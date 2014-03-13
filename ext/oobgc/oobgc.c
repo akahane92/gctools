@@ -81,6 +81,14 @@ install()
   }
 
   rb_tracepoint_enable(_oobgc.tpval);
+
+  /* rb_gc_stat() requires memory allocation for symbol creation only at
+   * first time. If rb_gc_stat() was called during GC at first time by
+   * tracepoint, memory allocation caused crash. We call rb_gc_stat() here
+   * for symbol creation.
+   */
+  rb_gc_stat(sym_total_allocated_object);
+
   _oobgc.installed = 1;
   return Qtrue;
 }
