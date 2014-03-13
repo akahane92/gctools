@@ -107,23 +107,33 @@ static VALUE
 oobgc(VALUE self, int dry_run)
 {
   size_t curr = rb_gc_stat(sym_total_allocated_object);
+  size_t prev_allocated_object = _oobgc.prev_allocated_object;
+  size_t threshold_mean = _oobgc.threshold.mean;
+  size_t threshold_max = _oobgc.threshold.max;
+
   if (!_oobgc.installed) install();
 
-  if (!_oobgc.prev_allocated_object) {
-    _oobgc.prev_allocated_object = curr;
+  if (!prev_allocated_object) {
+    prev_allocated_object = curr;
   } else {
-    size_t diff = curr - _oobgc.prev_allocated_object;
-    _oobgc.prev_allocated_object = curr;
+    size_t diff = curr - prev_allocated_object;
+    prev_allocated_object = curr;
 
-    if (_oobgc.threshold.mean)
-      _oobgc.threshold.mean = (diff / 4) + (_oobgc.threshold.mean * 3 / 4);
+    if (threshold_mean)
+      threshold_mean = (diff / 4) + (threshold_mean * 3 / 4);
     else
-      _oobgc.threshold.mean = diff;
+      threshold_mean = diff;
 
-    if (diff > _oobgc.threshold.max)
-      _oobgc.threshold.max = diff;
-    if (_oobgc.threshold.max > 200000)
-      _oobgc.threshold.max = 200000;
+    if (diff > threshold_max)
+      threshold_max = diff;
+    if (threshold_max > 200000)
+      threshold_max = 200000;
+  }
+
+  if (!dry_run) {
+    _oobgc.prev_allocated_object = prev_allocated_object;
+    _oobgc.threshold.mean = threshold_mean;
+    _oobgc.threshold.max = threshold_max;
   }
 
   if (_oobgc.sweep_needed) {
@@ -142,15 +152,15 @@ oobgc(VALUE self, int dry_run)
      */
     if ((rb_gc_stat(sym_old_object) >= rb_gc_stat(sym_old_object_limit)*0.97 ||
         rb_gc_stat(sym_remembered_shady_object) >= rb_gc_stat(sym_remembered_shady_object_limit)*0.97) &&
-        curr >= _oobgc.allocation_limit - _oobgc.threshold.max*0.98) {
-      /*fprintf(stderr, "oobgc MAJOR: %zu >= %zu - %zu\n", curr, _oobgc.allocation_limit, _oobgc.threshold.max);*/
+        curr >= _oobgc.allocation_limit - threshold_max*0.98) {
+      /*fprintf(stderr, "oobgc MAJOR: %zu >= %zu - %zu\n", curr, _oobgc.allocation_limit, threshold_max);*/
       if (!dry_run) {
         gc_start_major();
       }
       return Qtrue;
 
-    } else if (curr >= _oobgc.allocation_limit - _oobgc.threshold.mean) {
-      /*fprintf(stderr, "oobgc minor: %zu >= %zu - %zu\n", curr, _oobgc.allocation_limit, _oobgc.threshold.mean);*/
+    } else if (curr >= _oobgc.allocation_limit - threshold_mean) {
+      /*fprintf(stderr, "oobgc minor: %zu >= %zu - %zu\n", curr, _oobgc.allocation_limit, threshold_mean);*/
       if (!dry_run) {
         gc_start_minor();
       }
